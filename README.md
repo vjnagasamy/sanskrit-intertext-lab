@@ -1,7 +1,6 @@
 # Sanskrit Intertext Lab — Architecture & Usage Guide
 
-> Reference notes for `sanskrit-intertext-lab/` — a Sanskrit-native port of the Tibetan Intertext Lab pipeline.
-
+> Reference notes for `sanskrit-intertext-lab/` — a Sanskrit-native port of the Tibetan Intertext Lab pipeline. Tibetan source: https://github.com/ten-jampa/tibetan-intertext-lab. Adapted for Sanskrit using Claude Code
 ---
 
 ## What This Repo Is
