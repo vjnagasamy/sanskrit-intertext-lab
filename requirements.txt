@@ -1,0 +1,19 @@
+# Core dependencies
+numpy
+pandas
+huggingface_hub
+indic-transliteration
+sentence-transformers>=2.2.0
+torch>=2.0.0
+transformers>=4.30.0
+
+# Optional ML segmenter
+# stanza
+
+# Plotting and visualization
+matplotlib
+seaborn
+plotly
+
+# Notebook support
+ipykernel

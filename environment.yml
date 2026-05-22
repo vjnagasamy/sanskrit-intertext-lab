@@ -1,0 +1,22 @@
+name: sanskrit-intertext-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - setuptools<81
+  - wheel
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - plotly
+  - huggingface_hub
+  - transformers>=4.30.0
+  - sentence-transformers>=2.2.0
+  - pytorch>=2.0.0
+  - ipykernel
+  - jupyterlab
+  - pip:
+    - indic-transliteration
+    - accelerate

@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Model cache / HuggingFace
+.cache/
+models/
+*.bin
+*.safetensors
+
+# Pipeline outputs
+output/
+outputs/
+*.npy
+*.npz
+topk_*.csv
+topk_*.jsonl
+document_pair_summary.csv
+corpus_manifest.json
+pair_manifest.json
+sentences_a.csv
+sentences_b.csv
+similarity_matrix.npy
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
