@@ -21,10 +21,29 @@ class ResolveSegmentersTests(unittest.TestCase):
         self.assertEqual(resolved, "dandas_pada")
         mock_cls.assert_called_once_with(split_on_single_danda=True)
 
+    def test_lines_engine_returns_line_segmenter(self) -> None:
+        from sanskrit_pipeline.segmenters.lines import LineSegmenter
+
+        resolved = resolve_segmenter("lines")
+        self.assertIsInstance(resolved, LineSegmenter)
+        self.assertTrue(resolved.requires_line_structure)
+
     def test_stanza_engine_raises_when_not_installed(self) -> None:
         with patch("sanskrit_pipeline.segmenters.stanza_segmenter._STANZA_AVAILABLE", False):
             with self.assertRaises(ImportError):
                 resolve_segmenter("stanza")
+
+    def test_stanza_engine_uses_devanagari_default(self) -> None:
+        with patch("sanskrit_pipeline.pipeline.StanzaSegmenter", return_value="stanza_instance") as mock_cls:
+            resolved = resolve_segmenter("stanza")
+        self.assertEqual(resolved, "stanza_instance")
+        mock_cls.assert_called_once_with()
+
+    def test_stanza_iast_engine_keeps_source_script(self) -> None:
+        with patch("sanskrit_pipeline.pipeline.StanzaSegmenter", return_value="stanza_iast_instance") as mock_cls:
+            resolved = resolve_segmenter("stanza_iast")
+        self.assertEqual(resolved, "stanza_iast_instance")
+        mock_cls.assert_called_once_with(keep_source_script=True)
 
     def test_unknown_engine_raises_value_error(self) -> None:
         with self.assertRaises(ValueError) as ctx:

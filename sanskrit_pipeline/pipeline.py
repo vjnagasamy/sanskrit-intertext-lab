@@ -11,7 +11,7 @@ import numpy as np
 from .embeddings import DEFAULT_MODEL_ID, TextEmbedder
 from .io import InputRecord
 from .normalization import normalize_text
-from .segmenters import BaseSegmenter, DandasSegmenter, StanzaSegmenter
+from .segmenters import BaseSegmenter, DandasSegmenter, LineSegmenter, StanzaSegmenter
 
 
 @dataclass(slots=True)
@@ -48,8 +48,15 @@ class SanskritPipeline:
         source_format: str = "devanagari",
     ) -> list[PipelineResult]:
         results: list[PipelineResult] = []
+        preserve_lines = self.segmenter.requires_line_structure
+        transliterate = not self.segmenter.keep_source_script
         for record in records:
-            normalized = normalize_text(record.text, source_format=source_format)
+            normalized = normalize_text(
+                record.text,
+                source_format=source_format,
+                preserve_lines=preserve_lines,
+                transliterate=transliterate,
+            )
             segmented = self.segmenter.segment(normalized)
             segments = [segment.text for segment in segmented]
             segment_spans = [(segment.start, segment.end) for segment in segmented]
@@ -114,12 +121,15 @@ def resolve_segmenter(
     """Resolve the requested segmenter backend.
 
     Args:
-        engine: ``"dandas"`` (default, fast regex) or ``"stanza"`` (ML-based).
-        split_on_single_danda: Passed to DandasSegmenter; ignored for stanza.
+        engine: ``"dandas"`` (default, fast regex), ``"stanza"`` (ML-based, runs
+            on transliterated Devanagari), ``"stanza_iast"`` (ML-based, runs on
+            the original romanized IAST text), or ``"lines"`` (deterministic
+            one-segment-per-line).
+        split_on_single_danda: Passed to DandasSegmenter; ignored otherwise.
 
     Raises:
         ValueError: If the engine name is not recognized.
-        ImportError: If engine is ``"stanza"`` but stanza is not installed.
+        ImportError: If a stanza engine is requested but stanza is not installed.
     """
     engine = engine.lower().strip()
 
@@ -127,7 +137,12 @@ def resolve_segmenter(
         return DandasSegmenter(split_on_single_danda=split_on_single_danda)
     if engine == "stanza":
         return StanzaSegmenter()
+    if engine == "stanza_iast":
+        return StanzaSegmenter(keep_source_script=True)
+    if engine == "lines":
+        return LineSegmenter()
 
     raise ValueError(
-        f"Unsupported engine: {engine!r}. Valid options are 'dandas' and 'stanza'."
+        f"Unsupported engine: {engine!r}. "
+        "Valid options are 'dandas', 'stanza', 'stanza_iast', and 'lines'."
     )

@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", required=True, help="Output directory for bidirectional artifacts.")
     parser.add_argument("--label-a", default="Corpus A", help="Human-readable label for dir A.")
     parser.add_argument("--label-b", default="Corpus B", help="Human-readable label for dir B.")
-    parser.add_argument("--engine", default="dandas", choices=["dandas", "stanza"])
+    parser.add_argument("--engine", default="dandas", choices=["dandas", "stanza", "stanza_iast", "lines"])
     parser.add_argument("--input-format", default="devanagari", choices=["devanagari", "iast"])
     parser.add_argument(
         "--split-on-single-danda",

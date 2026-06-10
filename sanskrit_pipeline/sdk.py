@@ -120,7 +120,12 @@ class SanskritResearchSDK:
     def segment_text(self, text: str, source_format: str | None = None) -> SegmentationView:
         """Normalize and segment one source text."""
         source_format = source_format or self.source_format
-        normalized = normalize_text(text, source_format=source_format)
+        normalized = normalize_text(
+            text,
+            source_format=source_format,
+            preserve_lines=self._segmenter.requires_line_structure,
+            transliterate=not self._segmenter.keep_source_script,
+        )
         segmented = self._segmenter.segment(normalized)
         segments = [segment.text for segment in segmented]
         spans = [(segment.start, segment.end) for segment in segmented]

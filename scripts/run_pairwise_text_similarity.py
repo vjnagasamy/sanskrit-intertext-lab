@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--text-a", required=True, help="Path to text A (.txt).")
     parser.add_argument("--text-b", required=True, help="Path to text B (.txt).")
     parser.add_argument("--output-dir", required=True, help="Output directory for top-k artifacts.")
-    parser.add_argument("--engine", default="dandas", choices=["dandas", "stanza"])
+    parser.add_argument("--engine", default="dandas", choices=["dandas", "stanza", "stanza_iast", "lines"])
     parser.add_argument("--input-format", default="devanagari", choices=["devanagari", "iast"])
     parser.add_argument(
         "--split-on-single-danda",

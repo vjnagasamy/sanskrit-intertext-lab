@@ -6,19 +6,12 @@ import re
 
 from .base import (
     DANDA,
-    DEVANAGARI_DIGITS,
     DOUBLE_DANDA,
     BaseSegmenter,
     Segment,
+    has_devanagari,
+    is_verse_number,
 )
-
-# Segments containing only digits, spaces, and daṇḍa marks are verse numbers (e.g. ॥ १ ॥)
-_VERSE_NUMBER_RE = re.compile(
-    rf"^[\s{DEVANAGARI_DIGITS}0-9।॥.]+$"
-)
-
-# Matches Devanagari letters/digits/marks but NOT daṇḍa punctuation (U+0964–U+0965)
-_HAS_DEVANAGARI_RE = re.compile(r"[ऀ-ॣ०-ॿ]")
 
 
 class DandasSegmenter(BaseSegmenter):
@@ -64,7 +57,7 @@ class DandasSegmenter(BaseSegmenter):
             if is_delimiter:
                 current_parts.append(part)
                 segment_text = "".join(current_parts).strip()
-                if segment_text and _has_devanagari(segment_text) and not _is_verse_number(segment_text):
+                if segment_text and has_devanagari(segment_text) and not is_verse_number(segment_text):
                     segments.append(Segment(segment_text, buffer_start, cursor + part_len))
                 current_parts = []
                 buffer_start = cursor + part_len
@@ -79,17 +72,7 @@ class DandasSegmenter(BaseSegmenter):
         # Trailing text without a final delimiter
         if current_parts:
             tail = "".join(current_parts).strip()
-            if tail and _has_devanagari(tail) and not _is_verse_number(tail):
+            if tail and has_devanagari(tail) and not is_verse_number(tail):
                 segments.append(Segment(tail, buffer_start, len(text)))
 
         return segments
-
-
-def _is_verse_number(text: str) -> bool:
-    """Return True if the segment contains only digits, spaces, and punctuation."""
-    return bool(_VERSE_NUMBER_RE.match(text))
-
-
-def _has_devanagari(text: str) -> bool:
-    """Return True if the segment contains at least one Devanagari character."""
-    return bool(_HAS_DEVANAGARI_RE.search(text))

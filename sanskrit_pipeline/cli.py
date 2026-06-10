@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--engine",
         default="dandas",
-        choices=["dandas", "stanza"],
+        choices=["dandas", "stanza", "stanza_iast", "lines"],
         help="Sentence segmentation backend.",
     )
     parser.add_argument(

@@ -14,18 +14,35 @@ except ImportError:
     _INDIC_AVAILABLE = False
 
 _MULTISPACE_RE = re.compile(r"\s+")
+# Horizontal whitespace (spaces, tabs) but not newlines.
+_HORIZONTAL_WS_RE = re.compile(r"[^\S\n]+")
 
 
-def normalize_text(text: str, source_format: str = "devanagari") -> str:
+def normalize_text(
+    text: str,
+    source_format: str = "devanagari",
+    *,
+    preserve_lines: bool = False,
+    transliterate: bool = True,
+) -> str:
     """Normalize incoming text to Unicode Devanagari.
 
     Args:
         text: Raw input text.
         source_format: ``"devanagari"`` (default) or ``"iast"``.
             NFC normalization is applied in both cases.
+        preserve_lines: When True, keep newline boundaries (collapsing only
+            horizontal whitespace and dropping blank lines). Required by
+            line-based segmentation engines; the default collapses all
+            whitespace to single spaces.
+        transliterate: When False, IAST input is left in its romanized script
+            instead of being converted to Devanagari (NFC, BOM, and whitespace
+            handling still apply). Used by engines that segment in the source
+            script.
 
     Returns:
-        Normalized Devanagari string.
+        Normalized Devanagari string (or romanized text when
+        ``transliterate=False`` and ``source_format="iast"``).
 
     Raises:
         ValueError: If source_format is not recognized. Includes a hint for
@@ -35,13 +52,19 @@ def normalize_text(text: str, source_format: str = "devanagari") -> str:
         return ""
 
     source_format = source_format.lower()
-    cleaned = unicodedata.normalize("NFC", text).strip()
-    cleaned = _MULTISPACE_RE.sub(" ", cleaned)
+    normalized = unicodedata.normalize("NFC", text).replace("\ufeff", "")
+    if preserve_lines:
+        lines = (_HORIZONTAL_WS_RE.sub(" ", line).strip() for line in normalized.split("\n"))
+        cleaned = "\n".join(line for line in lines if line)
+    else:
+        cleaned = _MULTISPACE_RE.sub(" ", normalized.strip())
 
     if source_format == "devanagari":
         return cleaned
 
     if source_format == "iast":
+        if not transliterate:
+            return cleaned
         if not _INDIC_AVAILABLE:
             raise ImportError(
                 "indic-transliteration is required for IAST input. "

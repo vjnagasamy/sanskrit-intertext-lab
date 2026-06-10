@@ -66,10 +66,15 @@ def segment_text_to_sentences(
     split_on_single_danda: bool = False,
 ) -> list[str]:
     """Normalize and segment one text into sentence strings."""
-    normalized = normalize_text(text, source_format=source_format)
     segmenter = resolve_segmenter(
         engine=engine,
         split_on_single_danda=split_on_single_danda,
+    )
+    normalized = normalize_text(
+        text,
+        source_format=source_format,
+        preserve_lines=segmenter.requires_line_structure,
+        transliterate=not segmenter.keep_source_script,
     )
     segmented = segmenter.segment(normalized)
     return [segment.text for segment in segmented if segment.text.strip()]

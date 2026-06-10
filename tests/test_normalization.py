@@ -26,6 +26,27 @@ class NormalizationTests(unittest.TestCase):
         result = normalize_text("dharmo rakṣati", source_format="iast")
         self.assertIn("ध", result)
 
+    def test_collapses_newlines_by_default(self) -> None:
+        result = normalize_text("धर्मो\nरक्षति")
+        self.assertEqual(result, "धर्मो रक्षति")
+
+    def test_preserve_lines_keeps_newline_boundaries(self) -> None:
+        result = normalize_text("  धर्मो  \n\n  रक्षति  ", preserve_lines=True)
+        self.assertEqual(result, "धर्मो\nरक्षति")
+
+    def test_transliterate_false_keeps_romanized_iast(self) -> None:
+        result = normalize_text("dharmo rakṣati", source_format="iast", transliterate=False)
+        self.assertEqual(result, "dharmo rakṣati")
+
+    def test_transliterate_false_preserves_iast_lines(self) -> None:
+        result = normalize_text(
+            "1.1ab: athato\n1.1cd: sriheruka",
+            source_format="iast",
+            preserve_lines=True,
+            transliterate=False,
+        )
+        self.assertEqual(result, "1.1ab: athato\n1.1cd: sriheruka")
+
     def test_unicode_format_raises_helpful_error(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             normalize_text("धर्मो", source_format="unicode")
