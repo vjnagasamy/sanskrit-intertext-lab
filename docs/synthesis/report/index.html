@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bidirectional Pair Survival Report</title>
+  <script src="report_data.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #171717;
+      --muted: #60646c;
+      --line: #d8dce2;
+      --paper: #f7f8fa;
+      --panel: #ffffff;
+      --accent: #0f766e;
+      --accent-2: #7c2d12;
+      --heat: #b45309;
+      --cool: #2563eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    header, main, footer { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    .top-link { display: inline-block; margin-bottom: 10px; color: var(--accent); font-size: 13px; font-weight: 700; text-decoration: none; }
+    h1 { margin: 0 0 10px; font-size: clamp(30px, 4vw, 52px); letter-spacing: 0; }
+    h2 { margin: 30px 0 12px; font-size: 22px; }
+    p { margin: 0 0 12px; color: var(--muted); max-width: 900px; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      margin: 22px 0;
+    }
+    .metric, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .metric strong { display: block; font-size: 26px; }
+    .metric span { color: var(--muted); font-size: 13px; }
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) 220px 220px;
+      gap: 12px;
+      align-items: end;
+      margin: 18px 0;
+    }
+    label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+    input, select {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: white;
+      color: var(--ink);
+      font: inherit;
+    }
+    table { width: 100%; border-collapse: collapse; background: white; border: 1px solid var(--line); }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: #eef2f4; z-index: 1; font-size: 12px; color: #343840; }
+    tbody tr:hover { background: #f9fafb; }
+    .pair-title { font-weight: 700; font-size: 15px; }
+    .corpus-label {
+      display: inline-flex;
+      min-width: 54px;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-right: 6px;
+      color: #334155;
+      background: #f8fafc;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .pair-doc { margin-bottom: 8px; }
+    .file-provenance {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .score { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .pill {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      background: #f8fafc;
+      color: #334155;
+      white-space: nowrap;
+    }
+    .bars { display: grid; gap: 6px; min-width: 180px; }
+    .bar { display: grid; grid-template-columns: 68px 1fr 44px; gap: 8px; align-items: center; font-size: 12px; }
+    .track { height: 8px; background: #e5e7eb; border-radius: 99px; overflow: hidden; }
+    .fill { height: 100%; background: var(--accent); }
+    .fill.local { background: var(--heat); }
+    .fill.dir { background: var(--cool); }
+    .note { color: var(--muted); max-width: 320px; }
+    details { max-width: 520px; }
+    summary { cursor: pointer; color: var(--accent); font-weight: 650; }
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .explain {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .explain h3 { margin: 0 0 6px; font-size: 16px; }
+    @media (max-width: 860px) {
+      header, main, footer { padding: 18px; }
+      .controls { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; }
+      th { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="top-link" href="../../">Reports index</a>
+    <h1>Bidirectional Pair Survival Report</h1>
+    <p>This report joins the forward run (Corpus A as query side, Corpus B as corpus side) with the reverse run (Corpus B as query side, Corpus A as corpus side). It prioritizes file pairs whose signal remains high in both model prompt directions.</p>
+    <div class="summary" id="summary"></div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>How To Read This</h2>
+      <div class="explain">
+        <div>
+          <h3>Overall survival</h3>
+          <p>A rank-based composite. A pair scores high only if it remains strong when compared in both model directions. This is the close-reading queue.</p>
+        </div>
+        <div>
+          <h3>Broad affinity</h3>
+          <p>Uses the p95 score in both runs. High values suggest many strong cells in the matrix, not just one spectacular sentence match.</p>
+        </div>
+        <div>
+          <h3>Local spike</h3>
+          <p>Uses the single best sentence-pair score in both runs. High values point to possible quotation, formulaic phrasing, or a concentrated parallel.</p>
+        </div>
+        <div>
+          <h3>Directional coverage</h3>
+          <p>Corpus A→B asks how well Corpus A sentences find matches in Corpus B. Corpus B→A asks the inverse. Asymmetry is expected because each side has different length and internal repetition.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Prioritized Pairs</h2>
+      <div class="controls">
+        <label>Search file names
+          <input id="search" placeholder="Try: A001, tantra, Laghusaṃvara">
+        </label>
+        <label>Sort
+          <select id="sort">
+            <option value="overall_survival">Overall survival</option>
+            <option value="broad_affinity_survival">Broad affinity</option>
+            <option value="local_spike_survival">Local spike</option>
+            <option value="corpus_a_to_b_survival">Corpus A → B coverage</option>
+            <option value="corpus_b_to_a_survival">Corpus B → A coverage</option>
+            <option value="p95_min">p95 raw floor</option>
+            <option value="max_min">max raw floor</option>
+          </select>
+        </label>
+        <label>Rows
+          <select id="limit">
+            <option value="25">Top 25</option>
+            <option value="50">Top 50</option>
+            <option value="100">Top 100</option>
+            <option value="9999">All pairs</option>
+          </select>
+        </label>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Pair</th>
+            <th>Signal</th>
+            <th>Survival Scores</th>
+            <th>Raw Floors</th>
+            <th>Why Read</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+  <footer>
+    <p>Generated from summary artifacts only: forward and reverse document-pair CSVs. The sentence matrices and top-k evidence remain in the original run directories.</p>
+  </footer>
+<script>
+const data = window.BIDIRECTIONAL_REPORT_DATA;
+const pairs = data.pairs;
+const fmt = (value, digits = 3) => Number(value).toFixed(digits);
+
+function renderSummary() {
+  const items = [
+    ['Pairs joined', data.summary.pair_count],
+    ['Corpus A files', data.summary.corpus_a_count],
+    ['Corpus B files', data.summary.corpus_b_count],
+    ['Mean max delta', fmt(data.summary.mean_forward_reverse_max_delta)],
+    ['Mean p95 delta', fmt(data.summary.mean_forward_reverse_p95_delta)],
+  ];
+  document.getElementById('summary').innerHTML = items.map(([label, value]) =>
+    `<div class="metric"><strong>${value}</strong><span>${label}</span></div>`
+  ).join('');
+}
+
+function bar(label, value, cls = '') {
+  return `<div class="bar"><span>${label}</span><div class="track"><div class="fill ${cls}" style="width:${Math.max(0, Math.min(1, value)) * 100}%"></div></div><span>${fmt(value)}</span></div>`;
+}
+
+function metricDetails(row) {
+  return `<details>
+    <summary>metric details</summary>
+    <div class="details-grid">
+      <div>f max ${fmt(row.f_max)} / r max ${fmt(row.r_max)}</div>
+      <div>max delta ${fmt(row.max_delta_abs)}</div>
+      <div>f p95 ${fmt(row.f_p95)} / r p95 ${fmt(row.r_p95)}</div>
+      <div>p95 delta ${fmt(row.p95_delta_abs)}</div>
+      <div>f A→B ${fmt(row.f_corpus_a_to_b)} / r A→B ${fmt(row.r_corpus_a_to_b)}</div>
+      <div>A→B delta ${fmt(row.corpus_a_to_b_delta_abs)}</div>
+      <div>f B→A ${fmt(row.f_corpus_b_to_a)} / r B→A ${fmt(row.r_corpus_b_to_a)}</div>
+      <div>B→A delta ${fmt(row.corpus_b_to_a_delta_abs)}</div>
+    </div>
+  </details>`;
+}
+
+function fileDetails(row) {
+  return `<details class="file-provenance">
+    <summary>exact filenames</summary>
+    <div><strong>Corpus A:</strong> ${row.corpus_a_path}</div>
+    <div><strong>Corpus B:</strong> ${row.corpus_b_path}</div>
+    <div><strong>Run pair IDs:</strong> forward ${row.forward_pair_id}, reverse ${row.reverse_pair_id}</div>
+  </details>`;
+}
+
+function renderRows() {
+  const query = document.getElementById('search').value.trim().toLowerCase();
+  const sortKey = document.getElementById('sort').value;
+  const limit = Number(document.getElementById('limit').value);
+  const filtered = pairs
+    .filter(row => !query || `${row.corpus_a_label} ${row.corpus_b_label} ${row.corpus_a_short} ${row.corpus_b_short} ${row.corpus_a_path} ${row.corpus_b_path}`.toLowerCase().includes(query))
+    .sort((a, b) => b[sortKey] - a[sortKey] || b.overall_survival - a.overall_survival)
+    .slice(0, limit);
+
+  document.getElementById('rows').innerHTML = filtered.map((row, idx) => `
+    <tr>
+      <td class="score">${idx + 1}</td>
+      <td>
+        <div class="pair-doc">
+          <div class="pair-title"><span class="corpus-label">Corpus A</span>${row.corpus_a_label}</div>
+          <div class="sub">${row.corpus_a_short}</div>
+        </div>
+        <div class="pair-doc">
+          <div class="pair-title"><span class="corpus-label">Corpus B</span>${row.corpus_b_label}</div>
+          <div class="sub">${row.corpus_b_short}</div>
+        </div>
+        <div class="sub">${row.corpus_a_sentence_count} × ${row.corpus_b_sentence_count} sentences</div>
+        ${fileDetails(row)}
+      </td>
+      <td><span class="pill">${row.signal_label}</span><div class="sub">overall rank ${row.overall_rank}</div></td>
+      <td class="bars">
+        ${bar('overall', row.overall_survival)}
+        ${bar('broad', row.broad_affinity_survival)}
+        ${bar('local', row.local_spike_survival, 'local')}
+        ${bar('A→B', row.corpus_a_to_b_survival, 'dir')}
+        ${bar('B→A', row.corpus_b_to_a_survival, 'dir')}
+      </td>
+      <td>
+        <div class="score">p95 ${fmt(row.p95_min)}</div>
+        <div class="score">max ${fmt(row.max_min)}</div>
+        <div class="sub">direction floors: ${fmt(row.corpus_a_to_b_min)} / ${fmt(row.corpus_b_to_a_min)}</div>
+        ${metricDetails(row)}
+      </td>
+      <td class="note">${row.reading_reason}</td>
+    </tr>
+  `).join('');
+}
+
+renderSummary();
+renderRows();
+document.getElementById('search').addEventListener('input', renderRows);
+document.getElementById('sort').addEventListener('change', renderRows);
+document.getElementById('limit').addEventListener('change', renderRows);
+</script>
+</body>
+</html>
