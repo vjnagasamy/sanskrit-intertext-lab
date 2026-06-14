@@ -33,6 +33,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also split on single daṇḍa (।) in addition to double daṇḍa (॥). Produces pāda-level segments.",
     )
     parser.add_argument(
+        "--strip-dandas",
+        action="store_true",
+        help="Remove daṇḍa punctuation (।/॥) from emitted segments (dandas engine only).",
+    )
+    parser.add_argument(
+        "--whole-file",
+        action="store_true",
+        help="Load each .txt input as a single record instead of one record per line.",
+    )
+    parser.add_argument(
         "--text-column",
         default="input_text",
         help="Column name containing the source text for CSV/TSV/JSONL inputs.",
@@ -44,13 +54,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> PipelineArtifacts:
-    records = load_records(args.input, text_column=args.text_column, limit=args.limit)
+    records = load_records(
+        args.input,
+        text_column=args.text_column,
+        limit=args.limit,
+        whole_file=args.whole_file,
+    )
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     segmenter = resolve_segmenter(
         args.engine,
         split_on_single_danda=args.split_on_single_danda,
+        strip_dandas=args.strip_dandas,
     )
     pipeline = SanskritPipeline(segmenter)
     results = pipeline.run_segmentation(records, source_format=args.input_format)

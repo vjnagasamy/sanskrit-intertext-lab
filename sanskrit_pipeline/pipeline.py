@@ -117,6 +117,7 @@ class SanskritPipeline:
 def resolve_segmenter(
     engine: str,
     split_on_single_danda: bool = False,
+    strip_dandas: bool = False,
 ) -> BaseSegmenter:
     """Resolve the requested segmenter backend.
 
@@ -126,6 +127,8 @@ def resolve_segmenter(
             the original romanized IAST text), or ``"lines"`` (deterministic
             one-segment-per-line).
         split_on_single_danda: Passed to DandasSegmenter; ignored otherwise.
+        strip_dandas: Passed to DandasSegmenter; ignored otherwise. Removes daṇḍa
+            punctuation from emitted segments.
 
     Raises:
         ValueError: If the engine name is not recognized.
@@ -134,7 +137,10 @@ def resolve_segmenter(
     engine = engine.lower().strip()
 
     if engine == "dandas":
-        return DandasSegmenter(split_on_single_danda=split_on_single_danda)
+        return DandasSegmenter(
+            split_on_single_danda=split_on_single_danda,
+            strip_dandas=strip_dandas,
+        )
     if engine == "stanza":
         return StanzaSegmenter()
     if engine == "stanza_iast":

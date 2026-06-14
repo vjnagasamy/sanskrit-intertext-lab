@@ -12,7 +12,7 @@ Domain docs use single-context layout with root `CONTEXT.md`. See `CONTEXT.md` f
 
 ## Project Structure & Module Organization
 - `sanskrit_pipeline/`: main Python package (normalization, segmentation, clumping, pseudo-eval, embeddings, pairwise core, CLI, SDK).
-- `sanskrit_pipeline/segmenters/`: pluggable segmenter interface — `DandasSegmenter` (regex, always available) and `StanzaSegmenter` (optional ML, guarded import).
+- `sanskrit_pipeline/segmenters/`: pluggable segmenter interface — `DandasSegmenter` (regex, always available), `LineSegmenter` (one segment per line, label-aware), and `StanzaSegmenter` (optional ML, guarded import; `stanza` and `stanza_iast` engines).
 - `sanskrit_pipeline/reports/`: HTML report generators for corpus pairwise and bidirectional synthesis workflows.
 - `scripts/`: runnable entry points for end-to-end workflows (pipeline run, pairwise text, corpus pairwise, bidirectional, reports, benchmarks).
 - `tests/`: unit tests (`test_*.py`) covering CLI, normalization, pairwise core, clumping, segmenters, SDK, and device selection.
@@ -32,8 +32,9 @@ Domain docs use single-context layout with root `CONTEXT.md`. See `CONTEXT.md` f
 - Download Stanza Sanskrit model: `python scripts/download_stanza_sanskrit.py`
 
 ## Sanskrit-specific Notes
-- **Default engine**: `dandas` — splits on double daṇḍa (॥) only. Use `--split-on-single-danda` for pāda-level segments.
+- **Engines**: `dandas` (default, splits on ॥; add `--split-on-single-danda` for pāda-level, `--strip-dandas` to drop daṇḍas from segments), `lines` (one segment per physical line; for daṇḍa-less verse editions with one pāda per line; strips `1.1ab:` labels and `%` comments), `stanza` (ML on transliterated Devanagari), `stanza_iast` (ML on raw IAST).
 - **Default format**: `devanagari` — Devanagari Unicode text. Use `--input-format iast` for IAST romanized input.
+- **`.txt` loading**: one record per line by default; add `--whole-file` to load a `.txt` as a single record (needed when daṇḍa/line structure spans multiple physical lines).
 - **StanzaSegmenter**: optional; install with `pip install stanza` then `python scripts/download_stanza_sanskrit.py`. Tests that require it use `@unittest.skipUnless(stanza_available(), ...)`.
 - **Embedding model**: `buddhist-nlp/gemma-2-mitra-e` — a Gemma-2-2B model fine-tuned on Buddhist texts (Pali, Sanskrit, Tibetan). Requires ~5GB VRAM for float16 inference.
 - **Format errors**: passing `source_format="unicode"` or `"wylie"` raises an explicit error directing users to use `"devanagari"` or `"iast"` instead.

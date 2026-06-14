@@ -23,12 +23,22 @@ class DandasSegmenter(BaseSegmenter):
 
     Verse-number segments (e.g. ``॥ १ ॥``, ``॥ 1.2 ॥``) are automatically dropped.
     Segments with no Devanagari characters are also dropped.
+
+    Set ``strip_dandas=True`` to remove the daṇḍa punctuation from each emitted
+    segment (useful when the trailing ``॥``/``।`` is noise for downstream
+    embeddings). Boundaries are still detected on the daṇḍa marks first.
     """
 
     engine_name = "dandas"
 
-    def __init__(self, split_on_single_danda: bool = False) -> None:
+    def __init__(
+        self,
+        split_on_single_danda: bool = False,
+        strip_dandas: bool = False,
+    ) -> None:
         self.split_on_single_danda = split_on_single_danda
+        self.strip_dandas = strip_dandas
+        self._danda_cleanup = re.compile(rf"[{DANDA}{DOUBLE_DANDA}]+")
         if split_on_single_danda:
             self._split_pattern = re.compile(rf"([{DANDA}{DOUBLE_DANDA}]+)")
         else:
@@ -58,7 +68,7 @@ class DandasSegmenter(BaseSegmenter):
                 current_parts.append(part)
                 segment_text = "".join(current_parts).strip()
                 if segment_text and has_devanagari(segment_text) and not is_verse_number(segment_text):
-                    segments.append(Segment(segment_text, buffer_start, cursor + part_len))
+                    segments.append(Segment(self._emit(segment_text), buffer_start, cursor + part_len))
                 current_parts = []
                 buffer_start = cursor + part_len
             else:
@@ -73,6 +83,12 @@ class DandasSegmenter(BaseSegmenter):
         if current_parts:
             tail = "".join(current_parts).strip()
             if tail and has_devanagari(tail) and not is_verse_number(tail):
-                segments.append(Segment(tail, buffer_start, len(text)))
+                segments.append(Segment(self._emit(tail), buffer_start, len(text)))
 
         return segments
+
+    def _emit(self, segment_text: str) -> str:
+        """Return the segment text, optionally stripped of daṇḍa punctuation."""
+        if not self.strip_dandas:
+            return segment_text
+        return self._danda_cleanup.sub(" ", segment_text).strip()

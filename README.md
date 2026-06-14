@@ -18,9 +18,9 @@ The use case is **intertextuality detection**: finding semantically similar pass
 ```
 Raw Text (CSV/TSV/JSONL/TXT or .txt corpus files)
     ↓
-normalize_text()            ← Unicode NFC; optional IAST→Devanagari via indic-transliteration
+normalize_text()            ← Unicode NFC; optional IAST→Devanagari; optional line preservation
     ↓
-DandasSegmenter.segment()   ← Regex split on ॥ (and optionally ।); verse-number filter
+Segmenter.segment()         ← dandas (॥/।) | lines (\n) | stanza / stanza_iast (ML)
     ↓
 TextEmbedder.encode*()      ← Dense vectors via Gemma-2 last-token pooling
     ↓
@@ -56,20 +56,58 @@ HTML reports (corpus_pairwise_report, bidirectional_synthesis_report)
 
 ## Segmentation
 
-This is the main language-specific component. Sanskrit segmentation is **much simpler** than Tibetan because Sanskrit uses explicit daṇḍa punctuation with no morphosyntactic ambiguity.
+This is the main language-specific component. Sanskrit segmentation is **much simpler** than Tibetan because Sanskrit uses explicit daṇḍa punctuation with no morphosyntactic ambiguity — but only when the source edition actually carries that punctuation. The pipeline ships four engines so you can match the segmenter to how each edition is encoded.
+
+### Choosing an engine
+
+| Engine (`--engine`) | Splits on | Best for | Expected input |
+|---|---|---|---|
+| `dandas` (default) | daṇḍa marks `॥` / `।` | Editions with explicit daṇḍa punctuation | Devanagari or IAST text that **contains `॥`/`।`** (or IAST `\|\|`/`\|`, which transliterate to those marks) |
+| `lines` | physical line breaks (`\n`) | Verse editions with **one pāda/half-verse per line and no daṇḍas** | Line-structured text where each line is a unit; verse labels like `1.1ab:` are stripped, `%` comment lines dropped |
+| `stanza` | ML sentence boundaries | Prose / unpunctuated Devanagari | Any text; segments on the **transliterated Devanagari** |
+| `stanza_iast` | ML sentence boundaries | Prose / unpunctuated IAST | IAST text; segments in the **original romanized script** (no transliteration) |
+
+Rule of thumb: **daṇḍa-marked text → `dandas`; one-pāda-per-line text with no daṇḍas → `lines`; unmarked prose → `stanza`/`stanza_iast`.**
 
 ### DandasSegmenter (`sanskrit_pipeline/segmenters/dandas.py`)
+
+**Expected input format:** text that actually contains daṇḍa punctuation. For Devanagari that means `॥` (U+0965) and `।` (U+0964); for IAST input (`--input-format iast`) that means `\|\|` and `\|`, which are transliterated to `॥`/`।` before splitting. If the edition has **no** daṇḍas, this engine returns the whole text as a single segment — use `lines` or `stanza_iast` instead.
 
 | Mode | How it splits |
 |---|---|
 | Default (`split_on_single_danda=False`) | On `॥` (double daṇḍa, U+0965) only — full verses |
 | Pāda-level (`split_on_single_danda=True`) | On both `।` (U+0964) and `॥` — half-verses |
 
+Pass `strip_dandas=True` (CLI `--strip-dandas`) to drop the daṇḍa marks from the emitted segments while still using them to detect boundaries — handy when the trailing `॥`/`।` is noise for the embedding model.
+
 **Post-split filters** (both applied after every segment boundary):
 - `_has_devanagari()` — drops segments with no Devanagari letter/digit content (excludes daṇḍas themselves: U+0964–U+0965 are not counted)
 - `_is_verse_number()` — drops digit/space/punctuation-only tokens like `॥ १ ॥` or `॥ 1.2 ॥`
 
 These two filters prevent verse-number markers and stray Latin metadata from polluting the sentence index.
+
+> Note: the daṇḍa filters are Devanagari-aware, so running `dandas` on IAST works only because IAST is transliterated to Devanagari first. Segmenting raw IAST without daṇḍas is what `lines` and `stanza_iast` are for.
+
+### LineSegmenter (`sanskrit_pipeline/segmenters/lines.py`)
+
+Deterministic, no-ML engine that emits **one segment per non-empty physical line**. Built for verse editions — especially IAST critical editions — where each line is already a pāda or half-verse and there is **no daṇḍa punctuation** to split on.
+
+**Expected input format:** line-structured text, one verse unit per line. Typical sources are IAST editions such as `Laghusamvara_CIHTS_DHI-2002.txt`, which look like:
+
+```
+1.1ab: oṃ namaḥ śrīcakrasaṃvarāya
+1.1cd: athātaḥ saṃpravakṣyāmi ...
+% scribal note that should be ignored
+```
+
+Behavior:
+- Splits on `\n` only — daṇḍas and mid-line `|` are treated as ordinary characters (a long prose line stays one segment).
+- Requires `preserve_lines=True` normalization; this is wired automatically via `requires_line_structure = True`, so newlines survive into the segmenter.
+- **Strips leading verse-number labels** — both colon form (`1.1ab:`, transliterated `१.१अब्:`) and bare numeric form (`1.2 `).
+- **Drops `%` comment lines** and blank lines.
+- Works on Devanagari or IAST input. With `--input-format iast` it still transliterates to Devanagari unless you pair line structure with the IAST-preserving Stanza engine; for romanized-output line segmentation, keep the text in IAST and read the review CSV accordingly.
+
+Use `lines` when `dandas` collapses a file into a single segment (no daṇḍas) but the layout is one pāda per line.
 
 ### StanzaSegmenter (`sanskrit_pipeline/segmenters/stanza_segmenter.py`)
 
@@ -81,7 +119,7 @@ if stanza_available():
     from sanskrit_pipeline.segmenters import StanzaSegmenter
 ```
 
-Activate with `--engine stanza`. Download the model first:
+Activate with `--engine stanza` (segments transliterated Devanagari) or `--engine stanza_iast` (segments the original romanized IAST, skipping transliteration via `keep_source_script=True`). Download the model first:
 ```bash
 python scripts/download_stanza_sanskrit.py
 ```
@@ -116,6 +154,8 @@ python scripts/run_sanskrit_pipeline.py \
   --output-dir output/seg \
   --engine dandas
 ```
+
+> `.txt` inputs are loaded **one record per line** by default. Add `--whole-file` to treat the whole `.txt` as a single record — required when daṇḍa or line structure spans multiple physical lines (e.g. running `dandas` on a verse `.txt`). Add `--strip-dandas` to drop daṇḍa marks from segments.
 
 **Two-text pairwise similarity**:
 ```bash
@@ -190,12 +230,13 @@ sanskrit-intertext-lab/
 │   ├── segmenters/
 │   │   ├── base.py                    — BaseSegmenter ABC + Sanskrit Unicode constants
 │   │   ├── dandas.py                  — DandasSegmenter (regex, always available)
-│   │   └── stanza_segmenter.py        — StanzaSegmenter (optional ML, guarded import)
+│   │   ├── lines.py                   — LineSegmenter (one segment per line, label-aware)
+│   │   └── stanza_segmenter.py        — StanzaSegmenter (optional ML; stanza / stanza_iast)
 │   └── reports/
 │       ├── corpus_pairwise_report.py  — Per-run interactive HTML report
 │       └── bidirectional_synthesis_report.py — Forward+reverse synthesis HTML report
 ├── scripts/                           — Standalone CLI runners
-├── tests/                             — unittest suite (53 tests)
+├── tests/                             — unittest suite (75 tests)
 ├── notebooks/                         — Jupyter starter notebooks (3)
 ├── tasks/                             — Planning and lessons docs
 ├── pyproject.toml
@@ -278,7 +319,7 @@ All 6 sites are wired correctly. If you add a new corpus entry point, replicate 
 python -m unittest discover -s tests -v
 ```
 
-53 tests; 1 skips if `indic-transliteration` is not installed (IAST normalization test). All others run with no real model or GPU — mocks cover the embedding layer.
+75 tests; 1 skips if `indic-transliteration` is not installed (IAST normalization test). All others run with no real model or GPU — mocks cover the embedding layer.
 
 Key test targets:
 - `sanskrit_pipeline.corpus_pairwise.SanskritResearchSDK` — patch this to inject `FakeSDK` in corpus tests
@@ -295,7 +336,7 @@ Key test targets:
 | Segmentation complexity | High (40+ particle/terminator word lists) | Low (two Unicode codepoints + two filters) |
 | Normalization dep | `pyewts` (Wylie→Unicode; needs `--no-build-isolation`) | `indic-transliteration` (IAST→Devanagari; pip install) |
 | Source formats | `unicode`, `wylie` | `devanagari`, `iast` |
-| Engine choices | `botok`, `botok_ours`, `botok_intellexus`, `regex_intellexus` | `dandas`, `dandas_pada` (benchmark alias), `stanza` (optional) |
+| Engine choices | `botok`, `botok_ours`, `botok_intellexus`, `regex_intellexus` | `dandas` (+`--split-on-single-danda`), `lines`, `stanza`, `stanza_iast` |
 | Embedding model | `buddhist-nlp/gemma-2-mitra-e` | Same |
 | Query instruction | "…in Tibetan." | "…in Sanskrit." |
 | `[tool.uv]` in pyproject | Yes (needed for pyewts) | Removed |

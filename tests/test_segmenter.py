@@ -47,6 +47,23 @@ class DandasSegmenterTests(unittest.TestCase):
         self.assertEqual(len(segments), 1)
         self.assertIn("धर्मो", segments[0].text)
 
+    def test_strip_dandas_removes_punctuation_from_segments(self) -> None:
+        segmenter = DandasSegmenter(split_on_single_danda=True, strip_dandas=True)
+        text = "धर्मो रक्षति रक्षितः। सत्यमेव जयते॥"
+        segments = segmenter.segment(text)
+        self.assertEqual(len(segments), 2)
+        for segment in segments:
+            self.assertNotIn("।", segment.text)
+            self.assertNotIn("॥", segment.text)
+        self.assertEqual(segments[0].text, "धर्मो रक्षति रक्षितः")
+
+    def test_strip_dandas_preserves_boundaries(self) -> None:
+        kept = DandasSegmenter().segment("धर्मो रक्षति रक्षितः॥ सत्यमेव जयते॥")
+        stripped = DandasSegmenter(strip_dandas=True).segment(
+            "धर्मो रक्षति रक्षितः॥ सत्यमेव जयते॥"
+        )
+        self.assertEqual(len(kept), len(stripped))
+
     def test_engine_name_is_dandas(self) -> None:
         segmenter = DandasSegmenter()
         self.assertEqual(segmenter.engine_name, "dandas")

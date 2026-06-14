@@ -13,13 +13,19 @@ class ResolveSegmentersTests(unittest.TestCase):
         with patch("sanskrit_pipeline.pipeline.DandasSegmenter", return_value="dandas_instance") as mock_cls:
             resolved = resolve_segmenter("dandas")
         self.assertEqual(resolved, "dandas_instance")
-        mock_cls.assert_called_once_with(split_on_single_danda=False)
+        mock_cls.assert_called_once_with(split_on_single_danda=False, strip_dandas=False)
 
     def test_dandas_engine_passes_split_flag(self) -> None:
         with patch("sanskrit_pipeline.pipeline.DandasSegmenter", return_value="dandas_pada") as mock_cls:
             resolved = resolve_segmenter("dandas", split_on_single_danda=True)
         self.assertEqual(resolved, "dandas_pada")
-        mock_cls.assert_called_once_with(split_on_single_danda=True)
+        mock_cls.assert_called_once_with(split_on_single_danda=True, strip_dandas=False)
+
+    def test_dandas_engine_passes_strip_flag(self) -> None:
+        with patch("sanskrit_pipeline.pipeline.DandasSegmenter", return_value="dandas_stripped") as mock_cls:
+            resolved = resolve_segmenter("dandas", strip_dandas=True)
+        self.assertEqual(resolved, "dandas_stripped")
+        mock_cls.assert_called_once_with(split_on_single_danda=False, strip_dandas=True)
 
     def test_lines_engine_returns_line_segmenter(self) -> None:
         from sanskrit_pipeline.segmenters.lines import LineSegmenter

@@ -17,8 +17,12 @@ The textual representation of Sanskrit input, currently `devanagari` or `iast`.
 _Avoid_: encoding, dialect
 
 **Segmentation Engine**:
-A sentence-segmentation strategy used to split Sanskrit text into sentence segments. Current engines: `dandas` (regex on ॥/।) and `stanza` (ML-based, optional).
+A sentence-segmentation strategy used to split Sanskrit text into sentence segments. Current engines: `dandas` (regex on ॥/।), `lines` (one segment per physical line, for daṇḍa-less verse editions), `stanza` (ML-based on transliterated Devanagari, optional), and `stanza_iast` (ML-based on raw IAST, optional).
 _Avoid_: tokenizer, parser
+
+**Line-based Segmentation**:
+Segmentation that emits one segment per non-empty physical line, stripping leading verse-number labels (`1.1ab:`) and dropping `%` comment lines. Used for editions that carry no daṇḍa punctuation but place one pāda or half-verse per line.
+_Avoid_: line split, newline chunk
 
 **Sentence Segment**:
 One sentence-like unit emitted by a segmentation engine, with text and character-span boundaries.

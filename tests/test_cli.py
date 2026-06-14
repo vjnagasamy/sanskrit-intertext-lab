@@ -42,6 +42,8 @@ class CLITests(unittest.TestCase):
                 text_column="input_text",
                 limit=None,
                 split_on_single_danda=False,
+                strip_dandas=False,
+                whole_file=False,
                 embed=False,
                 model_id="unused",
             )
@@ -68,6 +70,8 @@ class CLITests(unittest.TestCase):
                 text_column="input_text",
                 limit=None,
                 split_on_single_danda=False,
+                strip_dandas=False,
+                whole_file=False,
                 embed=True,
                 model_id="fake/model",
             )

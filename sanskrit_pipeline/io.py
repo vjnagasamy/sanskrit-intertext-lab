@@ -20,8 +20,15 @@ def load_records(
     path: str | Path,
     text_column: str = "input_text",
     limit: int | None = None,
+    whole_file: bool = False,
 ) -> list[InputRecord]:
-    """Load input records from CSV, TSV, JSONL, or TXT."""
+    """Load input records from CSV, TSV, JSONL, or TXT.
+
+    For ``.txt`` inputs, the default is one record per non-empty line. Set
+    ``whole_file=True`` to load the entire file as a single record, which is
+    required when segmentation must see structure (daṇḍas or line breaks) that
+    spans multiple physical lines.
+    """
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(path)
@@ -34,7 +41,7 @@ def load_records(
     elif suffix == ".jsonl":
         records = _load_jsonl_records(path, text_column)
     elif suffix == ".txt":
-        records = _load_text_records(path)
+        records = _load_text_records(path, whole_file=whole_file)
     else:
         raise ValueError(f"Unsupported input format for {path}")
 
@@ -77,7 +84,13 @@ def _load_jsonl_records(path: Path, text_column: str) -> list[InputRecord]:
     return records
 
 
-def _load_text_records(path: Path) -> list[InputRecord]:
+def _load_text_records(path: Path, whole_file: bool = False) -> list[InputRecord]:
+    if whole_file:
+        text = path.read_text(encoding="utf-8").strip()
+        if not text:
+            return []
+        return [InputRecord(record_id=path.stem, text=text)]
+
     records: list[InputRecord] = []
     with path.open(encoding="utf-8") as handle:
         for index, line in enumerate(handle):
