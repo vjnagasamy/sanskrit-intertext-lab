@@ -12,6 +12,7 @@ from typing import Literal
 import numpy as np
 
 from .embeddings import DEFAULT_MODEL_ID, TorchDTypeName
+from .embedding_cache import EmbeddingCache
 from .pairwise import PairMatch, write_topk_csv, write_topk_jsonl
 from .pairwise_run import PairwiseSegment, TopKMode, make_segments, top_k_match_records
 from .sdk import EmbeddingView, SanskritResearchSDK
@@ -77,6 +78,7 @@ def run_corpus_pairwise_similarity(
     glob_pattern: str = "*.txt",
     limit_a: int | None = None,
     limit_b: int | None = None,
+    embedding_cache: EmbeddingCache | None = None,
 ) -> dict[str, Path]:
     """Run all cross-folder document-pair comparisons with reusable embeddings."""
     output_dir = Path(output_dir)
@@ -94,6 +96,7 @@ def run_corpus_pairwise_similarity(
         device_map=device_map,
         load_in_8bit=load_in_8bit,
         low_cpu_mem_usage=low_cpu_mem_usage,
+        cache=embedding_cache,
     )
 
     docs_a = _prepare_documents(
@@ -194,17 +197,28 @@ def _prepare_documents(
     for index, path in enumerate(files, start=1):
         relative_path = path.relative_to(root_dir).as_posix()
         doc_id = f"{side_prefix}{index:03d}"
-        text = path.read_text(encoding="utf-8")
-        seg_view = sdk.segment_text(text)
-        sentences: list[str] = []
-        spans: list[tuple[int, int]] = []
-        for segment_text, span in zip(seg_view.segments, seg_view.spans):
-            if not segment_text.strip():
-                continue
-            sentences.append(segment_text)
-            spans.append(span)
-        segments = make_segments(sentences, spans=spans)
-        embedding_view = sdk.embed_sentences(sentences, is_query=is_query)
+        if sdk.cache is not None:
+            cached = sdk.cached_embed_file(path, is_query=is_query)
+            sentences = cached.segments
+            segments = make_segments(sentences)
+            embedding_view = EmbeddingView(
+                model_id=sdk.model_id,
+                device=sdk.device,
+                sentences=sentences,
+                embeddings=np.asarray(cached.embeddings),
+            )
+        else:
+            text = path.read_text(encoding="utf-8")
+            seg_view = sdk.segment_text(text)
+            sentences = []
+            spans = []
+            for segment_text, span in zip(seg_view.segments, seg_view.spans):
+                if not segment_text.strip():
+                    continue
+                sentences.append(segment_text)
+                spans.append(span)
+            segments = make_segments(sentences, spans=spans)
+            embedding_view = sdk.embed_sentences(sentences, is_query=is_query)
         sentences_csv = _write_sentence_index_csv(
             segments,
             output_dir / f"{doc_id}_sentences.csv",

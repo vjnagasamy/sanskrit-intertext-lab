@@ -67,6 +67,78 @@ def cosine_similarity_matrix(embeddings_a: np.ndarray, embeddings_b: np.ndarray)
     return (a_norm @ b_norm.T).astype(np.float32)
 
 
+def run_ann(
+    segments_a: list[PairwiseSegment],
+    embeddings_a: np.ndarray,
+    segments_b: list[PairwiseSegment],
+    embeddings_b: np.ndarray,
+    *,
+    top_k: int,
+    use_gpu: bool = False,
+) -> PairwiseRunResult:
+    """Build an ANN index over B and retrieve global top-k matches for A."""
+    from .ann_search import ANNIndex
+
+    _validate_pairwise_inputs(segments_a, embeddings_a, segments_b, embeddings_b)
+    if top_k <= 0:
+        return PairwiseRunResult(
+            segments_a=segments_a,
+            segments_b=segments_b,
+            similarity_matrix=np.empty((len(segments_a), len(segments_b)), dtype=np.float32),
+            matches=[],
+            metrics=matrix_metrics(np.empty((0, 0), dtype=np.float32)),
+        )
+
+    index = ANNIndex(embeddings_b, use_gpu=use_gpu)
+    per_query_k = min(top_k, len(segments_b))
+    scores, indices = index.search(embeddings_a, per_query_k)
+
+    candidates: list[tuple[float, int, int]] = []
+    for i in range(scores.shape[0]):
+        for col in range(scores.shape[1]):
+            j = int(indices[i, col])
+            if j < 0:
+                continue
+            candidates.append((float(scores[i, col]), i, j))
+
+    candidates.sort(key=lambda item: (-item[0], item[1], item[2]))
+    selected = candidates[: min(top_k, len(candidates))]
+
+    matrix = np.full((len(segments_a), len(segments_b)), np.nan, dtype=np.float32)
+    matches: list[PairwiseMatchRecord] = []
+    for rank, (score, i, j) in enumerate(selected, start=1):
+        matrix[i, j] = score
+        matches.append(
+            PairwiseMatchRecord(
+                rank=rank,
+                score=score,
+                segment_a=segments_a[i],
+                segment_b=segments_b[j],
+            )
+        )
+
+    observed = matrix[~np.isnan(matrix)]
+    if observed.size:
+        metrics = PairwiseMetrics(
+            max_score=float(np.max(observed)),
+            mean_score=float(np.mean(observed)),
+            median_score=float(np.median(observed)),
+            p95_score=float(np.percentile(observed, 95)),
+            mean_best_a_to_b=float(np.nanmax(matrix, axis=1).mean()) if matrix.shape[0] else 0.0,
+            mean_best_b_to_a=float(np.nanmax(matrix, axis=0).mean()) if matrix.shape[1] else 0.0,
+        )
+    else:
+        metrics = matrix_metrics(np.empty((0, 0), dtype=np.float32))
+
+    return PairwiseRunResult(
+        segments_a=segments_a,
+        segments_b=segments_b,
+        similarity_matrix=matrix,
+        matches=matches,
+        metrics=metrics,
+    )
+
+
 def run_pairwise_similarity_core(
     segments_a: list[PairwiseSegment],
     embeddings_a: np.ndarray,

@@ -11,7 +11,7 @@ import numpy as np
 from .embeddings import DEFAULT_MODEL_ID, TextEmbedder
 from .io import InputRecord
 from .normalization import normalize_text
-from .segmenters import BaseSegmenter, DandasSegmenter, StanzaSegmenter
+from .segmenters import BaseSegmenter, DandasSegmenter, HybridSegmenter, ProseSegmenter, StanzaSegmenter
 
 
 @dataclass(slots=True)
@@ -110,12 +110,17 @@ class SanskritPipeline:
 def resolve_segmenter(
     engine: str,
     split_on_single_danda: bool = False,
+    *,
+    source_format: str = "devanagari",
+    max_tokens: int = 400,
+    overlap_tokens: int = 50,
+    chars_per_token: float = 3.5,
 ) -> BaseSegmenter:
     """Resolve the requested segmenter backend.
 
     Args:
-        engine: ``"dandas"`` (default, fast regex) or ``"stanza"`` (ML-based).
-        split_on_single_danda: Passed to DandasSegmenter; ignored for stanza.
+        engine: ``"dandas"``, ``"prose"``, ``"hybrid"``, or ``"stanza"``.
+        split_on_single_danda: Passed to DandasSegmenter and HybridSegmenter.
 
     Raises:
         ValueError: If the engine name is not recognized.
@@ -123,11 +128,27 @@ def resolve_segmenter(
     """
     engine = engine.lower().strip()
 
-    if engine == "dandas":
-        return DandasSegmenter(split_on_single_danda=split_on_single_danda)
+    if engine in {"dandas", "dandas_pada"}:
+        return DandasSegmenter(split_on_single_danda=split_on_single_danda or engine == "dandas_pada")
+    if engine == "prose":
+        return ProseSegmenter(
+            max_tokens=max_tokens,
+            overlap_tokens=overlap_tokens,
+            chars_per_token=chars_per_token,
+            source_format=source_format,
+        )
+    if engine == "hybrid":
+        return HybridSegmenter(
+            max_tokens=max_tokens,
+            overlap_tokens=overlap_tokens,
+            chars_per_token=chars_per_token,
+            split_on_single_danda=split_on_single_danda,
+            source_format=source_format,
+        )
     if engine == "stanza":
         return StanzaSegmenter()
 
     raise ValueError(
-        f"Unsupported engine: {engine!r}. Valid options are 'dandas' and 'stanza'."
+        f"Unsupported engine: {engine!r}. Valid options are "
+        "'dandas', 'dandas_pada', 'prose', 'hybrid', and 'stanza'."
     )

@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--text-a", required=True, help="Path to text A (.txt).")
     parser.add_argument("--text-b", required=True, help="Path to text B (.txt).")
     parser.add_argument("--output-dir", required=True, help="Output directory for top-k artifacts.")
-    parser.add_argument("--engine", default="dandas", choices=["dandas", "stanza"])
+    parser.add_argument("--engine", default="dandas", choices=["dandas", "prose", "hybrid", "stanza"])
     parser.add_argument("--input-format", default="devanagari", choices=["devanagari", "iast"])
     parser.add_argument(
         "--split-on-single-danda",
@@ -47,6 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--top-k", type=int, default=100)
     parser.add_argument("--save-similarity-npy", action="store_true")
+    parser.add_argument(
+        "--ann",
+        action="store_true",
+        help="Use FAISS approximate nearest-neighbour search instead of a full similarity matrix.",
+    )
+    parser.add_argument(
+        "--ann-use-gpu",
+        action="store_true",
+        help="Move the FAISS index to GPU when --ann is enabled.",
+    )
     return parser
 
 
@@ -73,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         low_cpu_mem_usage=args.low_cpu_mem_usage or None,
         top_k=args.top_k,
         save_similarity_npy=args.save_similarity_npy,
+        use_ann=args.ann,
+        ann_use_gpu=args.ann_use_gpu,
     )
     print(f"topk_csv={artifacts.topk_csv}")
     print(f"topk_jsonl={artifacts.topk_jsonl}")

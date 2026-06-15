@@ -9,6 +9,7 @@ from typing import Literal
 
 from .corpus_pairwise import run_corpus_pairwise_similarity
 from .embeddings import DEFAULT_MODEL_ID, TorchDTypeName
+from .embedding_cache import EmbeddingCache
 from .reports import generate_bidirectional_synthesis_report, generate_corpus_pairwise_report
 
 
@@ -55,6 +56,7 @@ def run_bidirectional_corpus_pairwise(
     generate_reports: bool = True,
     report_heatmap_size: int = 56,
     report_max_topk: int = 100,
+    embedding_cache: EmbeddingCache | None = None,
 ) -> BidirectionalCorpusArtifacts:
     """Run A->B and B->A corpus comparisons, then generate three reports.
 
@@ -86,6 +88,7 @@ def run_bidirectional_corpus_pairwise(
             glob_pattern=glob_pattern,
             limit_a=limit_a,
             limit_b=limit_b,
+            embedding_cache=embedding_cache,
         )
 
     if run_reverse and not (reuse_existing and _run_exists(reverse_dir)):
@@ -108,6 +111,7 @@ def run_bidirectional_corpus_pairwise(
             glob_pattern=glob_pattern,
             limit_a=limit_b,
             limit_b=limit_a,
+            embedding_cache=embedding_cache,
         )
 
     forward = _existing_run_artifacts(forward_dir)

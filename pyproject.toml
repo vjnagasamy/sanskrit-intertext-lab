@@ -28,6 +28,9 @@ dev = [
 stanza = [
     "stanza",
 ]
+ann = [
+    "faiss-cpu",
+]
 notebooks = [
     "ipykernel",
     "jupyterlab",
