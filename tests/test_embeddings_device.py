@@ -70,7 +70,7 @@ class EmbeddingDeviceTests(unittest.TestCase):
         mock_model_cls.from_pretrained.assert_called_once_with(
             DEFAULT_MODEL_ID,
             trust_remote_code=True,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map="auto",
             low_cpu_mem_usage=True,
         )
@@ -93,7 +93,7 @@ class EmbeddingDeviceTests(unittest.TestCase):
         mock_model_cls.from_pretrained.assert_called_once_with(
             DEFAULT_MODEL_ID,
             trust_remote_code=True,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map={"": "cuda"},
             low_cpu_mem_usage=True,
         )
@@ -112,7 +112,7 @@ class EmbeddingDeviceTests(unittest.TestCase):
             embedder._model_load_kwargs(trust_remote_code=True),
             {
                 "trust_remote_code": True,
-                "torch_dtype": torch.bfloat16,
+                "dtype": torch.bfloat16,
                 "device_map": {"": "cuda"},
             },
         )
@@ -140,6 +140,29 @@ class EmbeddingDeviceTests(unittest.TestCase):
             low_cpu_mem_usage=True,
         )
         mock_model_cls.from_pretrained.return_value.to.assert_not_called()
+
+    def test_from_pretrained_falls_back_to_torch_dtype(self) -> None:
+        calls = []
+
+        class FakeModelCls:
+            def from_pretrained(self, model_id, **kwargs):
+                calls.append(kwargs)
+                if "dtype" in kwargs:
+                    raise TypeError("got an unexpected keyword argument 'dtype'")
+                return "loaded"
+
+        embedder = TextEmbedder(
+            model_id=DEFAULT_MODEL_ID, device="cpu", torch_dtype="float16"
+        )
+        result = embedder._from_pretrained(
+            FakeModelCls(), {"dtype": torch.float16, "trust_remote_code": True}
+        )
+
+        self.assertEqual(result, "loaded")
+        self.assertEqual(len(calls), 2)
+        self.assertIn("dtype", calls[0])
+        self.assertIn("torch_dtype", calls[1])
+        self.assertNotIn("dtype", calls[1])
 
     def test_base_model_last_hidden_state_skips_lm_head(self) -> None:
         sentinel = object()

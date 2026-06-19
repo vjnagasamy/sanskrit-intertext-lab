@@ -95,9 +95,9 @@ class TextEmbedder:
         if self.model_id == DEFAULT_MODEL_ID:
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
-                self._model = AutoModelForCausalLM.from_pretrained(
-                    self.model_id,
-                    **self._model_load_kwargs(trust_remote_code=True),
+                self._model = self._from_pretrained(
+                    AutoModelForCausalLM,
+                    self._model_load_kwargs(trust_remote_code=True),
                 )
                 self._move_model_to_device()
                 self._model.eval()
@@ -125,10 +125,26 @@ class TextEmbedder:
                     "Rerun with device='cpu' (CLI: --device cpu)."
                 ) from exc
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-            self._model = AutoModel.from_pretrained(self.model_id, **self._model_load_kwargs())
+            self._model = self._from_pretrained(AutoModel, self._model_load_kwargs())
             self._move_model_to_device()
             self._model.eval()
             self._backend = "transformers"
+
+    def _from_pretrained(self, model_cls: Any, load_kwargs: dict[str, Any]) -> Any:
+        """Load a model, tolerating the ``dtype``/``torch_dtype`` rename.
+
+        Transformers >=4.56 uses ``dtype``; older releases only accept
+        ``torch_dtype``. Try the modern key first and fall back if the installed
+        version rejects it.
+        """
+        try:
+            return model_cls.from_pretrained(self.model_id, **load_kwargs)
+        except TypeError as exc:
+            if "dtype" in load_kwargs and "dtype" in str(exc):
+                legacy_kwargs = dict(load_kwargs)
+                legacy_kwargs["torch_dtype"] = legacy_kwargs.pop("dtype")
+                return model_cls.from_pretrained(self.model_id, **legacy_kwargs)
+            raise
 
     def _transformers_encode(self, texts: list[str]) -> np.ndarray:
         output_batches: list[np.ndarray] = []
@@ -204,7 +220,10 @@ class TextEmbedder:
         if trust_remote_code:
             kwargs["trust_remote_code"] = True
         if self.torch_dtype is not None:
-            kwargs["torch_dtype"] = _resolve_torch_dtype(self.torch_dtype)
+            # Transformers >=4.56 renamed ``torch_dtype`` to ``dtype`` and ignores
+            # the old name, silently loading in float32. Use the modern key;
+            # ``_from_pretrained`` falls back to ``torch_dtype`` on older versions.
+            kwargs["dtype"] = _resolve_torch_dtype(self.torch_dtype)
         if self.device_map is not None:
             kwargs["device_map"] = self.device_map
         elif self._should_direct_load_on_cuda():
