@@ -7,7 +7,13 @@ from unittest.mock import patch
 
 import torch
 
-from sanskrit_pipeline.embeddings import DEFAULT_MODEL_ID, DEFAULT_QUERY_INSTRUCTION, TextEmbedder, _resolve_torch_device
+from sanskrit_pipeline.embeddings import (
+    DEFAULT_MODEL_ID,
+    DEFAULT_QUERY_INSTRUCTION,
+    TextEmbedder,
+    _last_real_token_index,
+    _resolve_torch_device,
+)
 
 
 class EmbeddingDeviceTests(unittest.TestCase):
@@ -140,6 +146,28 @@ class EmbeddingDeviceTests(unittest.TestCase):
             low_cpu_mem_usage=True,
         )
         mock_model_cls.from_pretrained.return_value.to.assert_not_called()
+
+    def test_last_real_token_index_right_padding(self) -> None:
+        # rows padded on the right: real tokens first, then zeros
+        mask = torch.tensor([[1, 1, 1, 0, 0], [1, 1, 0, 0, 0]])
+        idx = _last_real_token_index(mask)
+        self.assertEqual(idx.tolist(), [2, 1])
+
+    def test_last_real_token_index_left_padding(self) -> None:
+        # rows padded on the left: zeros first, then real tokens
+        mask = torch.tensor([[0, 0, 1, 1, 1], [0, 0, 0, 1, 1]])
+        idx = _last_real_token_index(mask)
+        self.assertEqual(idx.tolist(), [4, 4])
+
+    def test_default_model_sets_right_padding(self) -> None:
+        with patch("sanskrit_pipeline.embeddings.AutoTokenizer") as mock_tokenizer_cls:
+            with patch("sanskrit_pipeline.embeddings.AutoModelForCausalLM"):
+                mock_tokenizer = mock_tokenizer_cls.from_pretrained.return_value
+                mock_tokenizer.pad_token = "<pad>"
+                mock_tokenizer.eos_token = "</s>"
+                embedder = TextEmbedder(model_id=DEFAULT_MODEL_ID, device="cpu")
+                embedder._ensure_backend()
+        self.assertEqual(mock_tokenizer.padding_side, "right")
 
     def test_from_pretrained_falls_back_to_torch_dtype(self) -> None:
         calls = []

@@ -95,6 +95,10 @@ class TextEmbedder:
         if self.model_id == DEFAULT_MODEL_ID:
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+                # Last-token pooling requires right padding: with left padding the
+                # real tokens shift position (wrong RoPE) and the pooled index lands
+                # on a pad/first token, collapsing all embeddings together.
+                self._tokenizer.padding_side = "right"
                 self._model = self._from_pretrained(
                     AutoModelForCausalLM,
                     self._model_load_kwargs(trust_remote_code=True),
@@ -125,6 +129,7 @@ class TextEmbedder:
                     "Rerun with device='cpu' (CLI: --device cpu)."
                 ) from exc
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+            self._tokenizer.padding_side = "right"
             self._model = self._from_pretrained(AutoModel, self._model_load_kwargs())
             self._move_model_to_device()
             self._model.eval()
@@ -178,7 +183,7 @@ class TextEmbedder:
             with torch.no_grad():
                 if self._backend == "gemma-last-token":
                     hidden = self._base_model_last_hidden_state(encoded)
-                    last_token_idx = encoded["attention_mask"].sum(dim=1) - 1
+                    last_token_idx = _last_real_token_index(encoded["attention_mask"])
                     pooled = hidden[
                         torch.arange(hidden.size(0), device=hidden.device),
                         last_token_idx,
@@ -268,6 +273,23 @@ class TextEmbedder:
         if self.embedding_progress == "batch" and level == "sentence":
             return
         print(message, flush=True)
+
+
+def _last_real_token_index(attention_mask: "torch.Tensor") -> "torch.Tensor":
+    """Return the index of the last non-padding token for each row.
+
+    Works regardless of padding side: it selects the highest position index whose
+    attention mask is 1, so left- or right-padded batches both pool the genuine
+    final token instead of a padding position.
+    """
+    seq_len = attention_mask.size(1)
+    positions = torch.arange(seq_len, device=attention_mask.device).unsqueeze(0)
+    masked_positions = torch.where(
+        attention_mask.bool(),
+        positions,
+        torch.full_like(positions, -1),
+    )
+    return masked_positions.max(dim=1).values.clamp(min=0)
 
 
 def _resolve_torch_device(preferred: Literal["auto", "cpu", "mps", "cuda"] = "auto") -> str:
