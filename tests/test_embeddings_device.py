@@ -141,6 +141,52 @@ class EmbeddingDeviceTests(unittest.TestCase):
         )
         mock_model_cls.from_pretrained.return_value.to.assert_not_called()
 
+    def test_base_model_last_hidden_state_skips_lm_head(self) -> None:
+        sentinel = object()
+
+        class FakeBase:
+            def __init__(self) -> None:
+                self.called_with = None
+
+            def __call__(self, **kwargs):
+                self.called_with = kwargs
+                return type("Out", (), {"last_hidden_state": sentinel})()
+
+        class FakeCausalLM:
+            def __init__(self) -> None:
+                self.model = FakeBase()
+
+            def __call__(self, **kwargs):  # full LM path must NOT be used
+                raise AssertionError("full causal LM forward should be skipped")
+
+        embedder = TextEmbedder(model_id=DEFAULT_MODEL_ID, device="cpu")
+        embedder._model = FakeCausalLM()
+        encoded = {"input_ids": "x", "attention_mask": "y"}
+
+        result = embedder._base_model_last_hidden_state(encoded)
+
+        self.assertIs(result, sentinel)
+        self.assertEqual(embedder._model.model.called_with, encoded)
+
+    def test_base_model_last_hidden_state_falls_back_to_decoder(self) -> None:
+        sentinel = object()
+
+        class FakeDecoder:
+            def __call__(self, **kwargs):
+                return type("Out", (), {"last_hidden_state": sentinel})()
+
+        class FakeCausalLM:
+            model = None
+
+            def get_decoder(self):
+                return FakeDecoder()
+
+        embedder = TextEmbedder(model_id=DEFAULT_MODEL_ID, device="cpu")
+        embedder._model = FakeCausalLM()
+
+        result = embedder._base_model_last_hidden_state({"input_ids": "x"})
+        self.assertIs(result, sentinel)
+
     def test_input_device_uses_first_non_cpu_device_from_model_map(self) -> None:
         embedder = TextEmbedder(model_id=DEFAULT_MODEL_ID, device="cpu")
         model = type("FakeModel", (), {})()

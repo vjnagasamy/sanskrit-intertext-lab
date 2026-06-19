@@ -161,8 +161,7 @@ class TextEmbedder:
             encoded = {key: value.to(input_device) for key, value in encoded.items()}
             with torch.no_grad():
                 if self._backend == "gemma-last-token":
-                    outputs = self._model(**encoded, output_hidden_states=True)
-                    hidden = outputs.hidden_states[-1]
+                    hidden = self._base_model_last_hidden_state(encoded)
                     last_token_idx = encoded["attention_mask"].sum(dim=1) - 1
                     pooled = hidden[
                         torch.arange(hidden.size(0), device=hidden.device),
@@ -178,6 +177,24 @@ class TextEmbedder:
             output_batches.append(pooled.float().cpu().numpy().astype(np.float32))
 
         return np.vstack(output_batches)
+
+    def _base_model_last_hidden_state(self, encoded: dict[str, Any]) -> "torch.Tensor":
+        """Return the final hidden state from the base transformer only.
+
+        Running the full ``AutoModelForCausalLM`` would compute logits over the
+        entire (~256k) vocabulary and retain every layer's hidden states, both of
+        which are large and unnecessary for last-token pooling. Calling the
+        underlying decoder/base model skips the LM head and returns the last
+        hidden state directly, drastically reducing GPU memory.
+        """
+        base_model = getattr(self._model, "model", None)
+        if base_model is None and hasattr(self._model, "get_decoder"):
+            base_model = self._model.get_decoder()
+        if base_model is None:
+            outputs = self._model(**encoded, output_hidden_states=True)
+            return outputs.hidden_states[-1]
+        outputs = base_model(**encoded)
+        return outputs.last_hidden_state
 
     def _format_query(self, text: str) -> str:
         return f"<instruct>{self.query_instruction}\n<query>{text}"
