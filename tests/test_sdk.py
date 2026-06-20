@@ -69,6 +69,29 @@ class SDKTests(unittest.TestCase):
         self.assertEqual(len(df), 2)
         self.assertIn("vector_norm", df.columns)
 
+    def test_embed_sentences_inherits_dtype_and_device_map(self) -> None:
+        with patch("sanskrit_pipeline.sdk.resolve_segmenter", return_value=FakeSegmenter()):
+            sdk = SanskritResearchSDK(
+                device="cuda",
+                model_id="fake/model",
+                batch_size=2,
+                torch_dtype="float16",
+                device_map="auto",
+                low_cpu_mem_usage=True,
+            )
+        with patch("sanskrit_pipeline.sdk.TextEmbedder") as mock_embedder_cls:
+            mock_embedder = mock_embedder_cls.return_value
+            mock_embedder._device = "cuda"
+            mock_embedder.encode_corpus.return_value = EmbeddingResult(
+                "fake/model", np.ones((1, 3), dtype=np.float32)
+            )
+            sdk.embed_sentences(["a"])
+
+        _, kwargs = mock_embedder_cls.call_args
+        self.assertEqual(kwargs["torch_dtype"], "float16")
+        self.assertEqual(kwargs["device_map"], "auto")
+        self.assertTrue(kwargs["low_cpu_mem_usage"])
+
     def test_embed_sentences_allows_progress_override(self) -> None:
         with patch("sanskrit_pipeline.sdk.resolve_segmenter", return_value=FakeSegmenter()):
             sdk = SanskritResearchSDK(device="cpu", model_id="fake/model", batch_size=2, embedding_progress="off")

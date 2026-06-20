@@ -158,6 +158,11 @@ class SanskritResearchSDK:
         device = device or self.device
         embedding_progress = embedding_progress or self.embedding_progress
         load_in_8bit = load_in_8bit if load_in_8bit is not None else self.load_in_8bit
+        torch_dtype = torch_dtype if torch_dtype is not None else self.torch_dtype
+        device_map = device_map if device_map is not None else self.device_map
+        low_cpu_mem_usage = (
+            low_cpu_mem_usage if low_cpu_mem_usage is not None else self.low_cpu_mem_usage
+        )
 
         embedder = self._get_embedder(
             model_id=model_id,
