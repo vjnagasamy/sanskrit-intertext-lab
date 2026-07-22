@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import importlib
 import sys
 import types
 import unittest
+from builtins import __import__ as real_import
 from unittest.mock import patch
 
 import numpy as np
@@ -110,20 +110,24 @@ class ANNSearchTests(unittest.TestCase):
         self.assertEqual(result.matches[0].segment_b.text, "x")
 
     def test_missing_faiss_raises_clear_error(self) -> None:
+        from sanskrit_pipeline import ann_search
+
+        def _import_without_faiss(name: str, *args: object, **kwargs: object) -> object:
+            if name == "faiss":
+                raise ImportError("No module named 'faiss'")
+            return real_import(name, *args, **kwargs)
+
         original = sys.modules.pop("faiss", None)
         try:
-            importlib.reload(importlib.import_module("sanskrit_pipeline.ann_search"))
-            from sanskrit_pipeline.ann_search import ANNIndex as ReloadedANNIndex
-
-            with self.assertRaises(ImportError) as ctx:
-                ReloadedANNIndex(np.ones((2, 3), dtype=np.float32))
+            with patch("builtins.__import__", side_effect=_import_without_faiss):
+                with self.assertRaises(ImportError) as ctx:
+                    ann_search.ANNIndex(np.ones((2, 3), dtype=np.float32))
             self.assertIn("faiss-cpu", str(ctx.exception))
         finally:
             if original is not None:
                 sys.modules["faiss"] = original
             else:
                 _install_fake_faiss()
-            importlib.reload(importlib.import_module("sanskrit_pipeline.ann_search"))
 
 
 if __name__ == "__main__":
