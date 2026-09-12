@@ -37,6 +37,7 @@ models/
 # Pipeline outputs
 output/
 outputs/
+.embedding_cache/
 *.npy
 *.npz
 topk_*.csv

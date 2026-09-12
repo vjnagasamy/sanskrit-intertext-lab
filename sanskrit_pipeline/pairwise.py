@@ -17,6 +17,7 @@ from .pairwise_run import (
     PairwiseRunResult,
     cosine_similarity_matrix as core_cosine_similarity_matrix,
     make_segments,
+    run_ann,
     run_pairwise_similarity_core,
     top_k_match_records,
 )
@@ -70,6 +71,7 @@ def segment_text_to_sentences(
     segmenter = resolve_segmenter(
         engine=engine,
         split_on_single_danda=split_on_single_danda,
+        source_format=source_format,
     )
     segmented = segmenter.segment(normalized)
     return [segment.text for segment in segmented if segment.text.strip()]
@@ -114,6 +116,8 @@ def run_pairwise_similarity(
     low_cpu_mem_usage: bool | None = None,
     top_k: int = 100,
     save_similarity_npy: bool = False,
+    use_ann: bool = False,
+    ann_use_gpu: bool = False,
 ) -> PairwiseArtifacts:
     """Run segment -> embed -> similarity -> global top-k for two texts."""
     sentences_a = segment_text_to_sentences(
@@ -142,13 +146,23 @@ def run_pairwise_similarity(
     )
     embeddings_a = embedder.encode_queries(sentences_a).embeddings
     embeddings_b = embedder.encode_corpus(sentences_b).embeddings
-    result = run_pairwise_similarity_core(
-        make_segments(sentences_a),
-        embeddings_a,
-        make_segments(sentences_b),
-        embeddings_b,
-        top_k=top_k,
-    )
+    if use_ann:
+        result = run_ann(
+            make_segments(sentences_a),
+            embeddings_a,
+            make_segments(sentences_b),
+            embeddings_b,
+            top_k=top_k,
+            use_gpu=ann_use_gpu,
+        )
+    else:
+        result = run_pairwise_similarity_core(
+            make_segments(sentences_a),
+            embeddings_a,
+            make_segments(sentences_b),
+            embeddings_b,
+            top_k=top_k,
+        )
     matrix = result.similarity_matrix
     matches = _compatibility_matches(result)
 
@@ -183,6 +197,7 @@ def run_pairwise_similarity(
         "p95_score": result.metrics.p95_score,
         "mean_best_a_to_b": result.metrics.mean_best_a_to_b,
         "mean_best_b_to_a": result.metrics.mean_best_b_to_a,
+        "use_ann": use_ann,
         "topk_csv": str(topk_csv),
         "topk_jsonl": str(topk_jsonl),
         "similarity_npy": str(similarity_npy) if similarity_npy else None,

@@ -10,9 +10,10 @@ import numpy as np
 import pandas as pd
 
 from .embeddings import DEFAULT_MODEL_ID, TextEmbedder, TorchDTypeName
+from .embedding_cache import CacheEntry, EmbeddingCache
 from .normalization import normalize_text
 from .pairwise import PairMatch
-from .pairwise_run import PairwiseMetrics, PairwiseSegment, make_segments, run_pairwise_similarity_core
+from .pairwise_run import PairwiseMetrics, PairwiseSegment, make_segments, run_ann, run_pairwise_similarity_core
 from .pipeline import resolve_segmenter
 
 
@@ -99,6 +100,7 @@ class SanskritResearchSDK:
         device_map: str | dict[str, int | str] | None = None,
         load_in_8bit: bool = False,
         low_cpu_mem_usage: bool | None = None,
+        cache: EmbeddingCache | None = None,
     ) -> None:
         self.engine = engine
         self.source_format = source_format
@@ -111,9 +113,11 @@ class SanskritResearchSDK:
         self.device_map = device_map
         self.load_in_8bit = load_in_8bit
         self.low_cpu_mem_usage = low_cpu_mem_usage
+        self.cache = cache
         self._segmenter = resolve_segmenter(
             engine=engine,
             split_on_single_danda=split_on_single_danda,
+            source_format=source_format,
         )
         self._embedders: dict[tuple, TextEmbedder] = {}
 
@@ -175,6 +179,64 @@ class SanskritResearchSDK:
             sentences=sentences,
             embeddings=result.embeddings,
         )
+
+    def cached_embed_file(
+        self,
+        file_path: str | Path,
+        *,
+        is_query: bool = False,
+        model_id: str | None = None,
+        batch_size: int | None = None,
+        device: Literal["auto", "cpu", "mps", "cuda"] | None = None,
+        embedding_progress: Literal["off", "batch", "sentence"] | None = None,
+        torch_dtype: TorchDTypeName | None = None,
+        device_map: str | dict[str, int | str] | None = None,
+        load_in_8bit: bool | None = None,
+        low_cpu_mem_usage: bool | None = None,
+    ) -> CacheEntry:
+        """Segment and embed one file, using the persistent cache when configured."""
+        path = Path(file_path)
+        model_id = model_id or self.model_id
+
+        if self.cache is not None:
+            cached = self.cache.get(
+                path,
+                model_id,
+                self.engine,
+                self.split_on_single_danda,
+                is_query=is_query,
+                source_format=self.source_format,
+            )
+            if cached is not None:
+                return cached
+
+        text = path.read_text(encoding="utf-8")
+        seg_view = self.segment_text(text)
+        sentences = [segment for segment in seg_view.segments if segment.strip()]
+        embedding_view = self.embed_sentences(
+            sentences,
+            model_id=model_id,
+            batch_size=batch_size,
+            device=device,
+            embedding_progress=embedding_progress,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            load_in_8bit=load_in_8bit,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+            is_query=is_query,
+        )
+        entry = CacheEntry(segments=sentences, embeddings=embedding_view.embeddings)
+        if self.cache is not None:
+            self.cache.put(
+                path,
+                model_id,
+                self.engine,
+                self.split_on_single_danda,
+                entry,
+                is_query=is_query,
+                source_format=self.source_format,
+            )
+        return entry
 
     def pairwise(
         self,
@@ -300,6 +362,36 @@ class SanskritResearchSDK:
             metrics=result.metrics,
         )
 
+    def pairwise_ann(
+        self,
+        emb_a: EmbeddingView,
+        emb_b: EmbeddingView,
+        *,
+        top_k: int = 20,
+        use_gpu: bool = False,
+    ) -> PairwiseView:
+        if emb_a.model_id != emb_b.model_id:
+            raise ValueError("Embedding views must use the same model_id.")
+        result = run_ann(
+            make_segments(emb_a.sentences),
+            emb_a.embeddings,
+            make_segments(emb_b.sentences),
+            emb_b.embeddings,
+            top_k=top_k,
+            use_gpu=use_gpu,
+        )
+        return PairwiseView(
+            model_id=emb_a.model_id,
+            device=emb_a.device,
+            segments_a=emb_a.sentences,
+            segments_b=emb_b.sentences,
+            segment_records_a=result.segments_a,
+            segment_records_b=result.segments_b,
+            similarity_matrix=result.similarity_matrix,
+            matches=_compatibility_matches(result),
+            metrics=result.metrics,
+        )
+
     def bidirectional_corpus_pairwise(
         self,
         dir_a: str | Path,
@@ -322,6 +414,7 @@ class SanskritResearchSDK:
             "device_map": self.device_map,
             "load_in_8bit": self.load_in_8bit,
             "low_cpu_mem_usage": self.low_cpu_mem_usage,
+            "embedding_cache": self.cache,
         }
         defaults.update(kwargs)
         return run_bidirectional_corpus_pairwise(dir_a, dir_b, output_dir, **defaults)

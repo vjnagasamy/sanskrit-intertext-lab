@@ -24,6 +24,12 @@ class FakeSDK:
 
     def __init__(self, **kwargs: object) -> None:
         self.kwargs = kwargs
+        self.cache = kwargs.get("cache")
+        self.engine = kwargs.get("engine", "dandas")
+        self.source_format = kwargs.get("source_format", "devanagari")
+        self.split_on_single_danda = kwargs.get("split_on_single_danda", False)
+        self.model_id = kwargs.get("model_id", "fake/model")
+        self.device = kwargs.get("device", "cpu")
         self.embed_calls: list[tuple[tuple[str, ...], bool]] = []
         FakeSDK.instances.append(self)
 
@@ -54,6 +60,38 @@ class FakeSDK:
             sentences=sentences,
             embeddings=embeddings,
         )
+
+    def cached_embed_file(self, file_path: Path, *, is_query: bool = False) -> object:
+        from sanskrit_pipeline.embedding_cache import CacheEntry
+
+        path = Path(file_path)
+        if self.cache is not None:
+            cached = self.cache.get(
+                path,
+                self.model_id,
+                self.engine,
+                self.split_on_single_danda,
+                is_query=is_query,
+                source_format=self.source_format,
+            )
+            if cached is not None:
+                return cached
+
+        text = path.read_text(encoding="utf-8")
+        seg_view = self.segment_text(text)
+        embedding_view = self.embed_sentences(seg_view.segments, is_query=is_query)
+        entry = CacheEntry(segments=embedding_view.sentences, embeddings=embedding_view.embeddings)
+        if self.cache is not None:
+            self.cache.put(
+                path,
+                self.model_id,
+                self.engine,
+                self.split_on_single_danda,
+                entry,
+                is_query=is_query,
+                source_format=self.source_format,
+            )
+        return entry
 
     def pairwise_from_embedding_views(
         self,
